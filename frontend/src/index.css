@@ -1,0 +1,16 @@
+@import './styles/design-tokens.css';
+@import './styles/global.css';
+@import './styles/animations.css';
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}

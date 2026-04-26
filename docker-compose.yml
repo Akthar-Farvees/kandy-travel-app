@@ -1,0 +1,90 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: kandy-backend
+    container_name: kandy-backend
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: sh -c "composer install --no-interaction --prefer-dist && php-fpm"
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-kandy_travel}
+      DB_USERNAME: ${DB_USERNAME:-kandy_user}
+      DB_PASSWORD: ${DB_PASSWORD:-kandy_secret}
+    volumes:
+      - ./backend:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+    networks:
+      - kandy-network
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: kandy-frontend
+    container_name: kandy-frontend
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    networks:
+      - kandy-network
+
+  db:
+    image: mysql:8.0
+    container_name: kandy-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-kandy_travel}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-kandy_secret}
+      MYSQL_USER: ${DB_USERNAME:-kandy_user}
+    volumes:
+      - kandy-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    networks:
+      - kandy-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: kandy-nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./backend:/var/www/html
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    networks:
+      - kandy-network
+    depends_on:
+      - backend
+
+networks:
+  kandy-network:
+    driver: bridge
+
+volumes:
+  kandy-mysql:
+    driver: local
+  backend_vendor:
+  frontend_node_modules:

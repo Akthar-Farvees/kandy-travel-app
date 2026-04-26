@@ -1,0 +1,35 @@
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Environment files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Build files
+**/dist/
+**/dist-ssr/
+**/public/build/
+**/public/hot/
+**/public/storage/
+
+# Storage and logs
+**/storage/*.key
+**/storage/pail
+**/*.log
+**/.phpunit.result.cache
+**/.phpunit.cache
+
+# IDEs and OS files
+.vscode/
+.idea/
+.DS_Store
+.sixth/
+*.swp
+*.swo
+
+# Project specific
+composer.phar
+.phpunit.result.cache
+.phpunit.cache
