@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { ImagePlus, MapPin, X } from 'lucide-react';
+import { useState, type FormEvent, useRef } from 'react';
+import { ImagePlus, MapPin, X, Upload, Link as LinkIcon } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { PRODUCT_CATEGORIES, type Location, type Product, type ProductCategory, type ProductPayload } from '../../types';
@@ -10,7 +10,7 @@ interface ProductFormProps {
   isSubmitting: boolean;
   validationErrors: Record<string, string[]>;
   onClose: () => void;
-  onSubmit: (payload: ProductPayload) => Promise<void>;
+  onSubmit: (payload: ProductPayload | FormData) => Promise<void>;
 }
 
 interface ProductFormState {
@@ -21,21 +21,15 @@ interface ProductFormState {
   image_url: string;
   tags: string;
   is_active: boolean;
+  image_file: File | null;
+  upload_mode: 'url' | 'upload';
 }
-
-const defaultFormState: ProductFormState = {
-  name: '',
-  short_description: '',
-  category: 'tea',
-  price: '',
-  image_url: '',
-  tags: '',
-  is_active: true,
-};
 
 function createFormState(product: Product | null): ProductFormState {
   if (!product) {
-    return defaultFormState;
+    return {
+      ...defaultFormState,
+    };
   }
 
   return {
@@ -46,8 +40,22 @@ function createFormState(product: Product | null): ProductFormState {
     image_url: product.image_url ?? '',
     tags: product.tags.join(', '),
     is_active: product.is_active,
+    image_file: null,
+    upload_mode: 'url',
   };
 }
+
+const defaultFormState: ProductFormState = {
+  name: '',
+  short_description: '',
+  category: 'tea',
+  price: '',
+  image_url: '',
+  tags: '',
+  is_active: true,
+  image_file: null,
+  upload_mode: 'url',
+};
 
 export function ProductForm({
   product,
@@ -58,15 +66,49 @@ export function ProductForm({
   onSubmit,
 }: ProductFormProps) {
   const [form, setForm] = useState<ProductFormState>(() => createFormState(product));
+  const [previewUrl, setPreviewUrl] = useState<string | null>(product?.image_url ?? null);
+  const [clientError, setClientError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!location) {
     return null;
   }
 
-  const getFieldError = (field: keyof ProductPayload | 'tags') => validationErrors[field]?.[0];
+  const getFieldError = (field: string) => validationErrors[field]?.[0];
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setClientError(null);
+
+    if (!file) return;
+
+    // Client-side validation for immediate feedback
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setClientError('Please select a valid image file (JPEG, PNG, GIF, or WebP).');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setClientError(`Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is 5 MB.`);
+      e.target.value = '';
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, image_file: file }));
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreviewUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setClientError(null);
 
     const tags = form.tags
       .split(',')
@@ -74,16 +116,34 @@ export function ProductForm({
       .filter(Boolean);
 
     try {
-      await onSubmit({
-        location_id: location.id,
-        name: form.name.trim(),
-        short_description: form.short_description.trim(),
-        category: form.category,
-        price: Number.parseFloat(form.price),
-        image_url: form.image_url.trim() || null,
-        tags,
-        is_active: form.is_active,
-      });
+      // Use FormData when a file is selected for upload
+      if (form.upload_mode === 'upload' && form.image_file) {
+        const formData = new FormData();
+        formData.append('location_id', location.id.toString());
+        formData.append('name', form.name.trim());
+        formData.append('short_description', form.short_description.trim());
+        formData.append('category', form.category);
+        formData.append('price', form.price);
+        formData.append('image', form.image_file);
+        formData.append('is_active', form.is_active ? '1' : '0');
+        tags.forEach((tag, index) => {
+          formData.append(`tags[${index}]`, tag);
+        });
+        
+        await onSubmit(formData);
+      } else {
+        // URL mode or upload mode with no file selected — send as JSON
+        await onSubmit({
+          location_id: location.id,
+          name: form.name.trim(),
+          short_description: form.short_description.trim(),
+          category: form.category,
+          price: Number.parseFloat(form.price),
+          image_url: form.image_url.trim() || null,
+          tags,
+          is_active: form.is_active,
+        });
+      }
     } catch {
       // Parent component owns the error state and feedback messaging.
     }
@@ -174,16 +234,73 @@ export function ProductForm({
               )}
             </div>
 
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-semibold text-secondary">Image URL</label>
-              <Input
-                type="url"
-                value={form.image_url}
-                onChange={(event) => setForm((prev) => ({ ...prev, image_url: event.target.value }))}
-                placeholder="https://images.unsplash.com/..."
-                icon={<ImagePlus size={18} />}
-                error={getFieldError('image_url')}
-              />
+            <div className="space-y-4 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-semibold text-secondary">Product Image</label>
+                <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setForm(prev => ({ ...prev, upload_mode: 'url' }))}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      form.upload_mode === 'url' ? 'bg-white text-primary shadow-sm' : 'text-gray-500 hover:text-secondary'
+                    }`}
+                  >
+                    <LinkIcon size={12} /> URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm(prev => ({ ...prev, upload_mode: 'upload' }))}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      form.upload_mode === 'upload' ? 'bg-white text-primary shadow-sm' : 'text-gray-500 hover:text-secondary'
+                    }`}
+                  >
+                    <Upload size={12} /> Upload
+                  </button>
+                </div>
+              </div>
+
+              {form.upload_mode === 'url' ? (
+                <Input
+                  type="url"
+                  value={form.image_url}
+                  onChange={(event) => {
+                    const url = event.target.value;
+                    setForm((prev) => ({ ...prev, image_url: url }));
+                    setPreviewUrl(url);
+                  }}
+                  placeholder="https://images.unsplash.com/..."
+                  icon={<ImagePlus size={18} />}
+                  error={getFieldError('image_url')}
+                />
+              ) : (
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`relative group cursor-pointer border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center transition-all ${
+                    clientError || getFieldError('image')
+                      ? 'border-red-300 bg-red-50/50'
+                      : form.image_file ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-primary/50'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="hidden"
+                  />
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${
+                    form.image_file ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400 group-hover:text-primary group-hover:bg-primary/10'
+                  }`}>
+                    <Upload size={24} />
+                  </div>
+                  <p className="text-sm font-medium text-secondary">
+                    {form.image_file ? form.image_file.name : 'Click to upload or drag and drop'}
+                  </p>
+                  <p className="text-xs text-text-muted mt-1">PNG, JPG or WebP (max 5MB)</p>
+                  {clientError && <p className="text-sm text-red-500 mt-2">{clientError}</p>}
+                  {getFieldError('image') && <p className="text-sm text-red-500 mt-2">{getFieldError('image')}</p>}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2 md:col-span-2">
@@ -208,13 +325,16 @@ export function ProductForm({
             </label>
           </div>
 
-          {form.image_url && (
-            <div className="overflow-hidden rounded-2xl border border-gray-100 bg-bg">
+          {previewUrl && (
+            <div className="relative group overflow-hidden rounded-2xl border border-gray-100 bg-bg">
               <img
-                src={form.image_url}
+                src={previewUrl}
                 alt="Product preview"
                 className="aspect-[16/8] w-full object-cover"
               />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <p className="text-white text-sm font-medium">Image Preview</p>
+              </div>
             </div>
           )}
 

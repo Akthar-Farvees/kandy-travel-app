@@ -125,7 +125,7 @@ export function AdminDashboardPage() {
     }
   };
 
-  const handleSubmit = async (payload: ProductPayload) => {
+  const handleSubmit = async (payload: ProductPayload | FormData) => {
     setIsSubmitting(true);
     setValidationErrors({});
 

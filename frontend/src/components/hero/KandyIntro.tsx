@@ -48,7 +48,7 @@ export function KandyIntro({ description, productCount }: KandyIntroProps) {
               className="rounded-lg object-cover w-full h-64 shadow-lg transform translate-y-8"
             />
             <img 
-              src="https://images.unsplash.com/photo-1590499092496-e260935579fa?w=800&q=80" 
+              src="https://www.dhl.com/discover/adobe/dynamicmedia/deliver/dm-aid--c621fc34-5ef1-4915-b7ee-6dbb76825168/handicraft-item-bag-sri-lanka-991x558.jpg?preferwebp=true&quality=82" 
               alt="Handicraft" 
               className="rounded-lg object-cover w-full h-80 shadow-lg"
             />

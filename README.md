@@ -14,7 +14,6 @@ Full-stack interview task implementation for a Kandy-focused travel and lifestyl
 
 - Local non-Docker runtime: MySQL
 - Docker runtime: MySQL
-- SQLite is not used for the application runtime
 
 ## Requirements Coverage
 
@@ -125,6 +124,7 @@ docker compose exec backend php artisan test
 - `DB_PASSWORD`
 - `CORS_ALLOWED_ORIGINS`
 - `SANCTUM_STATEFUL_DOMAINS`
+- `CLOUDINARY_URL` (Required for image uploads, format: `cloudinary://API_KEY:API_SECRET@CLOUD_NAME`)
 
 ## API Summary
 
